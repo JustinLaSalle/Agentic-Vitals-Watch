@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>VitalsWatch — simulated agent-to-equipment monitoring demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #F7F8FA; --panel: #FFFFFF; --border: #E4E7EC;
+    --ink: #1A1D24; --ink-dim: #6B7280;
+    --brand: #2F6FED; --brand-dim: #EAF0FE;
+    --good: #16A34A; --good-dim: #E7F7ED;
+    --warn: #D97706; --warn-dim: #FEF3E2;
+    --bad: #DC2626; --bad-dim: #FDECEC;
+    --font: 'Inter', sans-serif; --font-mono: 'JetBrains Mono', monospace;
+    box-sizing: border-box; padding-top: env(safe-area-inset-top,0px); padding-bottom: env(safe-area-inset-bottom,0px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg:#14161B; --panel:#1C1F26; --border:#2A2E37; --ink:#F0F1F4; --ink-dim:#9AA1AE; --brand-dim:#1E2A47; --good-dim:#0F2A1A; --warn-dim:#332107; --bad-dim:#3A1414; }
+  }
+  :root[data-theme="dark"] { --bg:#14161B; --panel:#1C1F26; --border:#2A2E37; --ink:#F0F1F4; --ink-dim:#9AA1AE; --brand-dim:#1E2A47; --good-dim:#0F2A1A; --warn-dim:#332107; --bad-dim:#3A1414; }
+  * { box-sizing: border-box; }
+  html { height:100%; }
+  body { margin:0; min-height:100%; background: var(--bg); color: var(--ink); font-family: var(--font); -webkit-font-smoothing:antialiased; }
+  .wrap { max-width: 780px; margin:0 auto; padding: 20px 16px 50px; }
+
+  .sim-banner {
+    background: var(--bad-dim); border: 1.5px solid var(--bad); color: var(--bad); border-radius: 10px;
+    padding: 12px 14px; font-size: 12.5px; line-height: 1.5; margin-bottom: 20px; font-weight: 500;
+  }
+  .sim-banner strong { display: block; font-size: 13px; margin-bottom: 3px; }
+
+  .eyebrow { font-family: var(--font-mono); font-size: 11px; letter-spacing:0.1em; color: var(--brand); text-transform: uppercase; margin-bottom: 8px; }
+  h1 { font-size: 24px; font-weight: 700; margin: 0 0 6px; }
+  .sub { color: var(--ink-dim); font-size: 14px; line-height:1.55; max-width: 62ch; margin-bottom: 20px; }
+
+  .scenario-row { display:flex; gap:8px; flex-wrap:wrap; margin-bottom: 20px; }
+  .scenario-btn {
+    font-size: 12.5px; background: var(--panel); border:1px solid var(--border); color: var(--ink-dim);
+    padding: 8px 14px; border-radius: 20px; cursor:pointer; font-family: var(--font);
+  }
+  .scenario-btn:hover { border-color: var(--brand); color: var(--brand); }
+  .scenario-btn.active { background: var(--brand); border-color: var(--brand); color: #fff; }
+
+  .status-banner {
+    border-radius: 12px; padding: 14px 16px; margin-bottom: 18px; display:flex; align-items:center; gap: 12px;
+    border: 1.5px solid var(--border); transition: all 0.3s ease;
+  }
+  .status-banner.normal { background: var(--good-dim); border-color: var(--good); }
+  .status-banner.watch { background: var(--warn-dim); border-color: var(--warn); }
+  .status-banner.urgent { background: var(--warn-dim); border-color: var(--warn); }
+  .status-banner.critical { background: var(--bad-dim); border-color: var(--bad); animation: pulseBorder 1s infinite; }
+  @keyframes pulseBorder { 50% { box-shadow: 0 0 0 4px rgba(220,38,38,0.15); } }
+  .status-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+  .status-banner.normal .status-dot { background: var(--good); }
+  .status-banner.watch .status-dot, .status-banner.urgent .status-dot { background: var(--warn); }
+  .status-banner.critical .status-dot { background: var(--bad); animation: pulse 0.8s infinite; }
+  @keyframes pulse { 50% { opacity: 0.3; } }
+  .status-text .st-label { font-family: var(--font-mono); font-size: 10px; letter-spacing:0.08em; color: var(--ink-dim); }
+  .status-text .st-main { font-weight: 600; font-size: 14px; }
+
+  .vitals-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 20px; }
+  .vital-card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+  .vital-card .vlabel { font-family: var(--font-mono); font-size: 10px; color: var(--ink-dim); letter-spacing:0.05em; margin-bottom: 6px; }
+  .vital-card .vvalue { font-size: 22px; font-weight: 700; }
+  .vital-card .vunit { font-size: 11px; color: var(--ink-dim); font-weight: 400; }
+  .vital-card .vtrend { font-size: 11px; margin-top: 3px; }
+  .vtrend.up { color: var(--warn); } .vtrend.down { color: var(--brand); } .vtrend.flat { color: var(--ink-dim); }
+  .vital-card.flagged { border-color: var(--bad); }
+
+  .panel-label { font-family: var(--font-mono); font-size: 10.5px; letter-spacing:0.1em; color: var(--ink-dim); margin: 22px 0 10px; text-transform: uppercase; }
+  .log-panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 4px 16px; max-height: 340px; overflow-y: auto; }
+  .log-entry { padding: 12px 0; border-bottom: 1px solid var(--border); }
+  .log-entry:last-child { border-bottom: none; }
+  .log-head { display:flex; justify-content:space-between; align-items:center; gap: 10px; margin-bottom: 4px; }
+  .log-who { font-weight: 600; font-size: 12.5px; }
+  .log-who.monitor { color: var(--brand); }
+  .log-who.doctor { color: var(--good); }
+  .log-who.system { color: var(--bad); }
+  .log-time { font-family: var(--font-mono); font-size: 10px; color: var(--ink-dim); }
+  .log-text { font-size: 13px; line-height: 1.55; color: var(--ink); }
+
+  .escalation {
+    background: var(--bad); color: #fff; border-radius: 12px; padding: 16px; margin-top: 16px; display:none;
+  }
+  .escalation .etitle { font-weight: 700; font-size: 14px; margin-bottom: 6px; }
+  .escalation .etext { font-size: 12.5px; line-height: 1.5; opacity: 0.95; }
+  .escalation .esim { font-family: var(--font-mono); font-size: 10.5px; margin-top: 10px; opacity: 0.85; border-top: 1px solid rgba(255,255,255,0.3); padding-top: 8px; }
+
+  .call-sim {
+    display: none; margin-top: 16px; background: #0A0C10; color: #E4E7EC; border: 2px dashed var(--bad);
+    border-radius: 12px; padding: 18px;
+  }
+  .call-fake-tag { font-family: var(--font-mono); font-size: 10px; color: var(--bad); text-align: center; letter-spacing: 0.03em; margin: 6px 0; }
+  .call-status { text-align: center; font-family: var(--font-mono); font-size: 13px; color: #fff; margin: 10px 0 14px; }
+  .call-transcript { font-size: 12.5px; line-height: 1.6; display: flex; flex-direction: column; gap: 8px; }
+  .call-line { padding: 8px 12px; border-radius: 8px; max-width: 90%; }
+  .call-line.agent { background: #1E2A47; align-self: flex-start; }
+  .call-line.dispatcher { background: #2A2E37; align-self: flex-end; }
+  .call-line .cl-who { font-family: var(--font-mono); font-size: 9.5px; opacity: 0.6; margin-bottom: 3px; }
+
+  footer.credit { text-align:center; margin-top: 30px; font-size:11px; color: var(--ink-dim); opacity:0.7; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="sim-banner">
+    <strong>⚠ Simulated demo only — not a real device</strong>
+    All readings, the "911 call," and every action below are fake, generated entirely in this browser for demonstration. Nothing is actually contacted, dialed, or monitored. This is a portfolio prototype of an agent coordination pattern — not a certified medical device, and it must never be used, or relied on, for real home health monitoring or real emergencies.
+  </div>
+
+  <div class="eyebrow">Agent ↔ Wearable Sensor Demo</div>
+  <h1>VitalsWatch</h1>
+  <p class="sub">Simulates a single wrist-worn sensor (heart rate, SpO2, fall detection) feeding a monitoring agent, which reports to a doctor agent on a regular interval and escalates — visibly, loudly, and clearly labeled as fake — if something looks like a real emergency.</p>
+
+  <div class="scenario-row" id="scenarioRow"></div>
+
+  <div class="status-banner normal" id="statusBanner">
+    <div class="status-dot"></div>
+    <div class="status-text">
+      <div class="st-label">CURRENT STATUS</div>
+      <div class="st-main" id="statusMain">Monitoring — establishing baseline...</div>
+    </div>
+  </div>
+
+  <div class="vitals-grid" id="vitalsGrid"></div>
+
+  <div class="panel-label">Monitoring log — agent reports &amp; doctor agent responses</div>
+  <div class="log-panel" id="logPanel"></div>
+
+  <div class="escalation" id="escalation">
+    <div class="etitle">🚨 Critical status — escalation triggered</div>
+    <div class="etext" id="escalationText"></div>
+    <div class="esim">SIMULATED ACTION: in a real deployment, this would page the on-call physician and, if unresolved, contact emergency services and the patient's emergency contact. No real action has been taken.</div>
+  </div>
+
+  <div class="call-sim" id="callSim">
+    <div class="call-fake-tag">⚠ SIMULATED — NOT A REAL CALL — NO NUMBER IS DIALED ⚠</div>
+    <div class="call-status" id="callStatus">Dialing 911 (simulated)...</div>
+    <div class="call-transcript" id="callTranscript"></div>
+    <div class="call-fake-tag">⚠ THIS IS A FAKE DEMO CALL SCREEN — NOTHING WAS ACTUALLY DIALED ⚠</div>
+  </div>
+
+  <footer class="credit">VitalsWatch — a simulated monitoring agent demo, built with the Claude API</footer>
+</div>
+
+<script>
+/* =========================================================
+   Simulated vitals engine — random walk toward a scenario target
+   ========================================================= */
+const BASELINE = { hr: 72, spo2: 98 };
+let vitals = { ...BASELINE };
+let prevVitals = { ...BASELINE };
+let target = { ...BASELINE };
+let fallDetected = false;
+
+const SCENARIOS = {
+  normal: { label: 'Normal', target: { hr: 72, spo2: 98 } },
+  irregular: { label: 'Irregular Heart Rhythm', target: { hr: 148, spo2: 95 }, fast: true },
+  lowoxygen: { label: 'Low Oxygen', target: { hr: 105, spo2: 84 } },
+  fall: { label: 'Fall Detected', target: { hr: 118, spo2: 93 }, fast: true, fall: true }
+};
+
+let currentScenario = 'normal';
+const scenarioRow = document.getElementById('scenarioRow');
+Object.keys(SCENARIOS).forEach(key => {
+  const btn = document.createElement('button');
+  btn.className = 'scenario-btn' + (key === 'normal' ? ' active' : '');
+  btn.textContent = SCENARIOS[key].label;
+  btn.addEventListener('click', () => {
+    currentScenario = key;
+    target = { ...SCENARIOS[key].target };
+    fallDetected = !!SCENARIOS[key].fall;
+    document.querySelectorAll('.scenario-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    addLog('system', 'Scenario changed', `Simulated scenario set to "${SCENARIOS[key].label}"${fallDetected ? ' — fall event triggered on the wearable sensor' : ' — vitals will drift toward this over the next readings'}.`);
+  });
+  scenarioRow.appendChild(btn);
+});
+
+function tickVitals() {
+  prevVitals = { ...vitals };
+  const speed = SCENARIOS[currentScenario].fast ? 0.18 : 0.05;
+  for (const k of Object.keys(vitals)) {
+    const noise = (Math.random() - 0.5) * (k === 'spo2' ? 0.6 : k === 'hr' ? 2 : 1.5);
+    vitals[k] += (target[k] - vitals[k]) * speed + noise;
+  }
+  vitals.spo2 = Math.min(100, vitals.spo2);
+  renderVitals();
+}
+
+const VITAL_META = {
+  hr: { label: 'HEART RATE', unit: 'bpm', flagLow: 50, flagHigh: 120 },
+  spo2: { label: 'SPO2', unit: '%', flagLow: 92, flagHigh: 101 }
+};
+
+function renderVitals() {
+  const grid = document.getElementById('vitalsGrid');
+  grid.innerHTML = '';
+  for (const k of Object.keys(vitals)) {
+    const meta = VITAL_META[k];
+    const val = vitals[k];
+    const prev = prevVitals[k];
+    const flagged = val < meta.flagLow || val > meta.flagHigh;
+    const trend = val > prev + 0.3 ? 'up' : val < prev - 0.3 ? 'down' : 'flat';
+    const trendArrow = trend === 'up' ? '↑' : trend === 'down' ? '↓' : '→';
+    const card = document.createElement('div');
+    card.className = 'vital-card' + (flagged ? ' flagged' : '');
+    card.innerHTML = `
+      <div class="vlabel">${meta.label}</div>
+      <div class="vvalue">${Math.round(val)}<span class="vunit"> ${meta.unit}</span></div>
+      <div class="vtrend ${trend}">${trendArrow} ${trend === 'flat' ? 'stable' : trend}</div>
+    `;
+    grid.appendChild(card);
+  }
+  const fallCard = document.createElement('div');
+  fallCard.className = 'vital-card' + (fallDetected ? ' flagged' : '');
+  fallCard.innerHTML = `
+    <div class="vlabel">MOTION / FALL</div>
+    <div class="vvalue" style="font-size:16px;">${fallDetected ? '⚠ Fall detected' : '✓ Normal activity'}</div>
+  `;
+  grid.appendChild(fallCard);
+}
+renderVitals();
+setInterval(tickVitals, 1200);
+
+/* =========================================================
+   Logging
+   ========================================================= */
+function addLog(who, title, text) {
+  const panel = document.getElementById('logPanel');
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  const whoLabel = who === 'monitor' ? 'MONITORING AGENT' : who === 'doctor' ? 'DOCTOR AGENT' : 'SYSTEM';
+  const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  entry.innerHTML = `
+    <div class="log-head"><span class="log-who ${who}">${whoLabel}${title ? ' — ' + escapeHtml(title) : ''}</span><span class="log-time">${time}</span></div>
+    <div class="log-text">${escapeHtml(text)}</div>
+  `;
+  panel.appendChild(entry);
+  panel.scrollTop = panel.scrollHeight;
+}
+addLog('system', 'Session started', 'Monitoring initialized. Establishing baseline vitals before the first agent check.');
+
+/* =========================================================
+   Audio — synthesized heartbeat tick + critical alarm, no files
+   ========================================================= */
+let actx = null, audioEnabled = true, alarmActive = false, heartbeatTimer = null;
+function ensureAudio() { if (!actx) actx = new (window.AudioContext||window.webkitAudioContext)(); if (actx.state==='suspended') actx.resume(); }
+function playTone(freq, dur, type, g) {
+  if (!audioEnabled) return;
+  ensureAudio();
+  const osc = actx.createOscillator(), gain = actx.createGain();
+  osc.type = type; osc.frequency.setValueAtTime(freq, actx.currentTime);
+  gain.gain.setValueAtTime(g, actx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + dur);
+  osc.connect(gain); gain.connect(actx.destination); osc.start(); osc.stop(actx.currentTime + dur);
+}
+function heartbeatTick() {
+  if (!alarmActive) playTone(70, 0.12, 'sine', 0.06);
+  const interval = Math.max(350, 60000 / Math.max(30, vitals.hr));
+  heartbeatTimer = setTimeout(heartbeatTick, interval);
+}
+heartbeatTick();
+
+let alarmLoop = null;
+function startAlarm() {
+  if (alarmActive) return;
+  alarmActive = true;
+  let toggle = false;
+  alarmLoop = setInterval(() => {
+    playTone(toggle ? 880 : 660, 0.35, 'square', 0.05);
+    toggle = !toggle;
+  }, 400);
+}
+function stopAlarm() {
+  alarmActive = false;
+  if (alarmLoop) { clearInterval(alarmLoop); alarmLoop = null; }
+}
+function playStatusSound(status) {
+  if (status === 'critical') startAlarm();
+  else stopAlarm();
+}
+
+const audioToggleBtn = document.createElement('button');
+audioToggleBtn.className = 'scenario-btn';
+audioToggleBtn.textContent = '🔊 Audio';
+audioToggleBtn.style.marginLeft = 'auto';
+audioToggleBtn.addEventListener('click', () => {
+  audioEnabled = !audioEnabled;
+  audioToggleBtn.textContent = audioEnabled ? '🔊 Audio' : '🔇 Audio';
+  if (!audioEnabled) stopAlarm();
+  else ensureAudio();
+});
+scenarioRow.appendChild(audioToggleBtn);
+
+/* =========================================================
+   Simulated 911 call — clearly fake, for demonstration only
+   ========================================================= */
+async function start911Call(vitalsSnapshot) {
+  const panel = document.getElementById('callSim');
+  const statusEl = document.getElementById('callStatus');
+  const transcriptEl = document.getElementById('callTranscript');
+  panel.style.display = 'block';
+  statusEl.textContent = 'Dialing 911 (simulated)...';
+  transcriptEl.innerHTML = '';
+  panel.scrollIntoView({ behavior: 'smooth', block: 'end' });
+
+  await new Promise(r => setTimeout(r, 1400));
+  if (!alarmActive) return; // resolved before the fake call "connected"
+  statusEl.textContent = '● Connected (simulated) — 00:00';
+
+  let openingLine;
+  try {
+    const sample = await claude.use('sample');
+    const res = sample ? await sample(`Write one short, calm, automated emergency-alert message (2 sentences max) that a home health monitoring system would speak to a 911 dispatcher, reporting: ${vitalsSnapshot.fall ? 'a detected fall' : 'critical vital signs'} (heart rate ${vitalsSnapshot.hr} bpm, SpO2 ${vitalsSnapshot.spo2}%) for a resident at a registered home address, requesting emergency dispatch. Plain text only, no quotation marks.`, { modelTier: 'default' }) : null;
+    openingLine = (res && res.text) || "This is an automated health monitoring alert. A resident at the registered address requires emergency assistance. Please dispatch immediately.";
+  } catch (e) {
+    openingLine = "This is an automated health monitoring alert. A resident at the registered address requires emergency assistance. Please dispatch immediately.";
+  }
+
+  addCallLine('agent', 'VitalsWatch (automated)', openingLine);
+  await new Promise(r => setTimeout(r, 900));
+  addCallLine('dispatcher', '911 Dispatcher (simulated)', 'Copy that. Confirming address on file and dispatching now — stay on the line.');
+  await new Promise(r => setTimeout(r, 700));
+  addCallLine('agent', 'VitalsWatch (automated)', 'Address confirmed: 123 Example St, Demo City (placeholder — no real address used). Standing by.');
+}
+function stop911Call() {
+  const panel = document.getElementById('callSim');
+  if (panel.style.display === 'block') {
+    document.getElementById('callStatus').textContent = 'Call ended (simulated) — status returned to normal';
+    setTimeout(() => { panel.style.display = 'none'; }, 1800);
+  }
+}
+function addCallLine(who, label, text) {
+  const el = document.getElementById('callTranscript');
+  const line = document.createElement('div');
+  line.className = 'call-line ' + who;
+  line.innerHTML = `<div class="cl-who">${escapeHtml(label)}</div>${escapeHtml(text)}`;
+  el.appendChild(line);
+}
+
+/* =========================================================
+   Agent monitoring loop
+   ========================================================= */
+async function sampleJSON(prompt) {
+  const sample = await claude.use('sample');
+  if (!sample) throw { code: 'not_available', message: "AI access isn't available in this view." };
+  return sample.json(prompt, { modelTier: 'default' });
+}
+
+let checkCount = 0;
+let lastStatus = 'normal';
+
+function setStatusBanner(status, mainText) {
+  const banner = document.getElementById('statusBanner');
+  banner.className = 'status-banner ' + status;
+  document.getElementById('statusMain').textContent = mainText;
+}
+
+async function runMonitoringCheck() {
+  checkCount++;
+  const vitalsSnapshot = { hr: Math.round(vitals.hr), spo2: Math.round(vitals.spo2), fall: fallDetected };
+
+  const prompt = `You are a remote monitoring agent reviewing a routine check-in from a single wrist-worn sensor on an at-home patient. This is check #${checkCount}.
+
+Current readings: Heart rate ${vitalsSnapshot.hr} bpm, SpO2 ${vitalsSnapshot.spo2}%. Fall/impact detected by the wearable's motion sensor: ${vitalsSnapshot.fall ? 'YES' : 'no'}.
+
+Classify the patient's status and decide what to do. These are illustrative general thresholds, not a specific patient's clinical baseline:
+- "normal": readings in typical healthy adult resting ranges, no fall detected
+- "watch": one reading mildly outside typical range, not urgent, no fall
+- "urgent": readings clearly abnormal, warrants prompt physician review, no fall
+- "critical": a fall was detected, OR readings indicate a potential emergency (very low SpO2, very high/low heart rate) — requires immediate escalation. A detected fall alone is always at least "critical" regardless of vitals, since an unresponsive or injured person may not be able to call for help themselves.
+
+Respond ONLY with valid JSON:
+{
+  "status": "normal" or "watch" or "urgent" or "critical",
+  "report_to_doctor": "a concise 1-2 sentence clinical-style report of this check, as you'd actually send to the on-call physician"
+}`;
+
+  try {
+    const result = await sampleJSON(prompt);
+    lastStatus = result.status;
+    setStatusBanner(result.status, statusMainText(result.status));
+    addLog('monitor', `Check #${checkCount}`, result.report_to_doctor);
+    playStatusSound(result.status);
+
+    if (result.status === 'urgent' || result.status === 'critical') {
+      await getDoctorResponse(result.status, result.report_to_doctor, vitalsSnapshot);
+    }
+    if (result.status === 'critical') {
+      triggerEscalation(vitalsSnapshot);
+    } else {
+      document.getElementById('escalation').style.display = 'none';
+      stop911Call();
+    }
+  } catch (err) {
+    console.error(err);
+    addLog('system', 'Error', `Monitoring check failed (${err && err.code ? err.code : 'unknown'}). Will retry next interval.`);
+  }
+}
+
+async function getDoctorResponse(status, report, vitalsSnapshot) {
+  const prompt = `You are the on-call doctor agent receiving this report from a remote monitoring agent about a patient:
+
+"${report}"
+
+Readings: HR ${vitalsSnapshot.hr} bpm, BP ${vitalsSnapshot.sbp}/${vitalsSnapshot.dbp}, SpO2 ${vitalsSnapshot.spo2}%, RR ${vitalsSnapshot.rr}/min. Status flagged as: ${status}.
+
+Respond with ONLY valid JSON: { "instruction": "your response/instruction to the monitoring agent, 1-2 sentences, in a realistic clinical tone" }`;
+  try {
+    const doc = await sampleJSON(prompt);
+    addLog('doctor', null, doc.instruction);
+  } catch (err) {
+    addLog('system', 'Error', 'Doctor agent did not respond in time.');
+  }
+}
+
+function triggerEscalation(vitalsSnapshot) {
+  const esc = document.getElementById('escalation');
+  esc.style.display = 'block';
+  document.getElementById('escalationText').textContent = vitalsSnapshot.fall
+    ? `Fall detected by wearable motion sensor. Heart rate ${vitalsSnapshot.hr} bpm, SpO2 ${vitalsSnapshot.spo2}%.`
+    : `Critical readings detected: HR ${vitalsSnapshot.hr} bpm, SpO2 ${vitalsSnapshot.spo2}%.`;
+  addLog('system', 'Escalation triggered', 'Status classified as critical. Escalation protocol simulated (see banner below log).');
+  esc.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  start911Call(vitalsSnapshot);
+}
+
+function statusMainText(status) {
+  if (status === 'normal') return 'Normal — all readings within typical range';
+  if (status === 'watch') return 'Watch — minor deviation noted, monitoring closely';
+  if (status === 'urgent') return 'Urgent — abnormal readings, physician notified';
+  if (status === 'critical') return 'CRITICAL — escalation in progress';
+  return 'Monitoring...';
+}
+
+function escapeHtml(str) { const d = document.createElement('div'); d.textContent = str || ''; return d.innerHTML; }
+
+// First check shortly after load, then every 8 seconds
+setTimeout(runMonitoringCheck, 2500);
+setInterval(runMonitoringCheck, 8000);
+</script>
+</body>
+</html>
